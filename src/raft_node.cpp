@@ -163,10 +163,21 @@ void RaftNode::handleHeartBeat(int term) {
 }
 
 void RaftNode::setupNetworking() {
-    boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::tcp::v4(), std::stoi(nodeId) + 10000); // example port
-    acceptor.open(endpoint.protocol());
-
+    boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::tcp::v4(), std::stoi(nodeId) + 10000);
     boost::system::error_code ec;
+
+    acceptor.open(endpoint.protocol());
+    if (ec) {
+        std::cerr << "Error opening acceptor for node " << nodeId << ": " << ec.message() << std::endl;
+        return;
+    }
+
+    acceptor.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true), ec);
+    if (ec) {
+        std::cerr << "Error setting SO_REUSEADDR for node " << nodeId << ": " << ec.message() << std::endl;
+        return;
+    }
+
     acceptor.bind(endpoint, ec);
     if (ec) {
         std::cerr << "Error binding acceptor for node " << nodeId << ": " << ec.message() << std::endl;
