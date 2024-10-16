@@ -1,0 +1,3 @@
+/mnt/c/Users/James Park/Desktop/software/teenyKV/build/CMakeFiles/rebuild_cache.dir
+/mnt/c/Users/James Park/Desktop/software/teenyKV/build/CMakeFiles/edit_cache.dir
+/mnt/c/Users/James Park/Desktop/software/teenyKV/build/CMakeFiles/teenyKV.dir

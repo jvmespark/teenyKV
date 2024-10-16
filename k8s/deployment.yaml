@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teenykv-deployment
+spec:
+  replicas: 3 # Number of replicas for the distributed environment
+  selector:
+    matchLabels:
+      app: teenykv
+  template:
+    metadata:
+      labels:
+        app: teenykv
+    spec:
+      containers:
+      - name: teenykv-container
+        image: teenykv:latest
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+        env:
+        - name: NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
