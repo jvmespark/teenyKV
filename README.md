@@ -1,7 +1,7 @@
 # teenyKV
 ```bash
 git clone https://github.com/jvmespark/teenyKV.git
-cd teenyKV && cd build
+cd teenyKV && mkdir build && cd build
 cmake ..
 make
 ./teenyKV
