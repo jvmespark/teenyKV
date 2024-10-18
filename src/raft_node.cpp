@@ -21,20 +21,19 @@ void RaftNode::startElection() {
 }
 
 void RaftNode::sendVoteRequest(int term, int peerId) {
-    std::string request = "vote_request:" + std::to_string(term) + ":" + std::to_string(peerId) + "\n";
+    std::string request = "vote_request:" + std::to_string(term) + ":" + nodeId + "\n";
 
     auto peerSocket = findPeerSocket(peerId);
+
     if (peerSocket) {
         boost::asio::async_write(*peerSocket, boost::asio::buffer(request),
-            [this, peerId](const boost::system::error_code& ec, std::size_t /*length*/) {
+            [this, peerId](const boost::system::error_code& ec, std::size_t) {
                 if (!ec) {
                     std::cout << "Vote request sent to peer " << peerId << std::endl;
                 } else {
                     std::cerr << "Failed to send vote request to peer " << peerId << ": " << ec.message() << std::endl;
                 }
             });
-    } else {
-        std::cerr << "No socket found for peer " << peerId << std::endl;
     }
 }
 
@@ -60,9 +59,9 @@ void RaftNode::sendVoteResponse(int candidateId, bool granted) {
     auto responseBuffer = std::make_shared<std::string>(response);
 
     boost::asio::async_write(*socket, boost::asio::buffer(*responseBuffer), 
-        [responseBuffer, candidateId](boost::system::error_code ec, std::size_t /*length*/) {
+        [this, responseBuffer, candidateId](boost::system::error_code ec, std::size_t /*length*/) {
             if (!ec) {
-                std::cout << "Sent vote response to candidate " << candidateId << std::endl;
+                std::cout << "Sent vote response to candidate " << candidateId << " from " <<nodeId<<std::endl;
             } else {
                 std::cerr << "Failed to send vote response to candidate " << candidateId 
                           << ": " << ec.message() << std::endl;
@@ -85,26 +84,20 @@ void RaftNode::handleVoteResponse(bool voteGranted) {
 
 void RaftNode::sendHeartBeat() {
     if (currentState == NodeState::LEADER) {
-        std::cout << "Node " << nodeId << " sending heartbeat for term " << currentTerm << std::endl;
+        for (const auto& peerId : peerIds) {
+            std::cout << "Node " << nodeId << " sending heartbeat for term " << currentTerm << " to peer "<<peerId<<std::endl;
+            std::string message = "heartbeat:" + std::to_string(currentTerm) + "\n";
+            auto peerSocket = findPeerSocket(std::stoi(peerId));
 
-        for (const auto& peer : peerIds) {
-            std::string host = "localhost";  
-            std::string port = peer;  
-
-            try {
-                boost::asio::ip::tcp::socket socket(ioContext);
-                boost::asio::ip::tcp::resolver resolver(ioContext);
-                auto endpoints = resolver.resolve(host, port);
-                boost::asio::connect(socket, endpoints);
-
-                std::string message = "heartbeat:" + std::to_string(currentTerm);
-
-                boost::asio::write(socket, boost::asio::buffer(message));
-
-                std::cout << "Sent heartbeat to peer " << peer << std::endl;
-            }
-            catch (std::exception& e) {
-                std::cerr << "Failed to send heartbeat to peer " << peer << ": " << e.what() << std::endl;
+            if (peerSocket) {
+                boost::asio::async_write(*peerSocket, boost::asio::buffer(message),
+                    [this, peerId](const boost::system::error_code& ec, std::size_t) {
+                        if (!ec) {
+                            std::cout << "Heartbeat sent to peer " << peerId << std::endl;
+                        } else {
+                            std::cerr << "Failed to send heartbeat to peer " << peerId << ": " << ec.message() << std::endl;
+                        }
+                    });
             }
         }
 
@@ -120,10 +113,11 @@ void RaftNode::resetElectionTimeout() {
     electionTimer.expires_after(std::chrono::milliseconds(dis(gen)));
     electionTimer.async_wait([this](const boost::system::error_code& ec) {
         if (!ec) {
+            std::cout<<"Starting Leader Election"<<std::endl;
             startElection(); 
         }
     });
-}
+}   
 
 void RaftNode::resetHeartBeatTimer() {
     heartbeatTimer.expires_after(std::chrono::milliseconds(heartbeatInterval));
@@ -152,6 +146,7 @@ void RaftNode::becomeFollower(int term) {
 }
 
 void RaftNode::handleHeartBeat(int term) {
+    std::cout<<"HERE"<<std::endl;
     if (term > currentTerm) {
         becomeFollower(term);
     } else if (currentState != NodeState::FOLLOWER) {
@@ -198,16 +193,15 @@ void RaftNode::setupNetworking() {
 void RaftNode::initializePeerConnections() {
     for (const auto& peerId : peerIds) {
         auto socket = std::make_shared<boost::asio::ip::tcp::socket>(ioContext);
-        boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 10000 + std::stoi(peerId));
+        boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::tcp::v4(), std::stoi(peerId) + 10000);
         
         boost::system::error_code ec;
         socket->connect(endpoint, ec);
         if (!ec) {
-        
-            std::string endpoint_str = "127.0.0.1:" + std::to_string(std::stoi(peerId) + 10000);
+            std::string endpoint_str = endpoint.address().to_string() + ":" + std::to_string(endpoint.port());
             peerEndpointToId[endpoint_str] = std::stoi(peerId); 
-        
             peerSockets[std::stoi(peerId)] = socket;
+
             std::cout << "Connected to peer " << peerId << std::endl;
         } else {
             std::cerr << "Failed to connect to peer " << peerId << ": " << ec.message() << std::endl;
@@ -230,16 +224,13 @@ void RaftNode::acceptNewConnection() {
 }
 
 void RaftNode::handleIncomingConnection(std::shared_ptr<boost::asio::ip::tcp::socket> socket) {
-    std::cout << "Received connection on node " << nodeId << std::endl;
-
-    int peerId = getPeerIdFromSocket(*socket);
-    peerSockets[peerId] = socket;
+    std::cout << "Received connection on node " << nodeId <<std::endl;
 
     boost::asio::streambuf buffer;
 
     try {
         boost::asio::read_until(*socket, buffer, "\n");
-
+        
         std::istream is(&buffer);
         std::string message;
         std::getline(is, message);
@@ -266,9 +257,13 @@ void RaftNode::handleIncomingConnection(std::shared_ptr<boost::asio::ip::tcp::so
             int term = std::stoi(parsed_values[1]);
             int peerId = std::stoi(parsed_values[2]);
 
+            std::cout<<command<<" "<<term<<" "<<peerId<<std::endl;
+
             handleVoteRequest(term, peerId);
         } else if (command == "vote_response") {
             bool voteGranted = bool(std::stoi(parsed_values[1]));
+
+            std::cout<<command<<" "<<voteGranted<<std::endl;
 
             handleVoteResponse(voteGranted);
         }

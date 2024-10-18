@@ -14,7 +14,6 @@ int main() {
 
     std::vector<std::shared_ptr<RaftNode>> nodes;
 
-    // Initialize all nodes
     for (const auto& nodeId : nodeIds) {
         std::vector<std::string> peerIds;
         for (const auto& peerId : nodeIds) {
@@ -23,20 +22,19 @@ int main() {
             }
         }
 
-        // Instantiate a RaftNode with its ID and its peer IDs
         auto node = std::make_shared<RaftNode>(ioContext, nodeId, peerIds);
-
-        // Add the node to the list
         nodes.push_back(node);
     }
 
-    // Start the io_context in a separate thread to allow asynchronous operations
-    std::thread t([&ioContext]() { ioContext.run(); });
+    for (auto node : nodes) {
+        node->initializePeerConnections();
+    }
 
-    // Start an election for one of the nodes
+    std::thread t([&ioContext]() { ioContext.run(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     nodes[0]->startElection();
 
-    // Wait for the thread to finish
     t.join();
 
     return 0;

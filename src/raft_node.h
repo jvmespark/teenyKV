@@ -31,6 +31,7 @@ class RaftNode {
         void handleVoteResponse(bool voteGranted);
         void resetElectionTimeout();
         void resetHeartBeatTimer();
+        void initializePeerConnections();
 
         // =============== LOG REPLICATION ===============
         /*
@@ -69,7 +70,6 @@ class RaftNode {
         std::shared_ptr<boost::asio::ip::tcp::socket> findPeerSocket(int peerId);
         void sendVoteRequest(int term, int peerId);
         void sendVoteResponse(int candidateId, bool granted);
-        void initializePeerConnections();
 
         //KeyValueStore kvStore;
 };
